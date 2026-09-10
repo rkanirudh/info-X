@@ -1,9 +1,8 @@
 /* ==========================================================================
-   ABB Ability™ Condition Monitoring for Belts - Pure CSS Design System
+   INFO X - Intelligent Belt Monitoring System (Pure CSS Design System)
    ========================================================================== */
 
-/* Google Fonts */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700;800&display=swap');
 
 *, *::before, *::after {
   box-sizing: border-box;
@@ -12,13 +11,11 @@
 }
 
 :root {
-  /* ABB Brand Colors */
   --abb-red: #FF000F;
   --abb-red-hover: #D9000C;
   --abb-red-soft: rgba(255, 0, 15, 0.08);
   --abb-red-border: rgba(255, 0, 15, 0.25);
 
-  /* Status Colors */
   --color-good: #00875A;
   --color-good-bg: rgba(0, 135, 90, 0.12);
   --color-warn: #FF8B00;
@@ -28,7 +25,6 @@
   --color-info: #0052CC;
   --color-info-bg: rgba(0, 82, 204, 0.12);
 
-  /* Light Theme (Default ABB Standard) */
   --bg-app: #F0F2F5;
   --bg-surface: #FFFFFF;
   --bg-surface-alt: #F8F9FA;
@@ -43,7 +39,6 @@
   --shadow-md: 0 4px 12px rgba(0,0,0,0.07), 0 2px 4px rgba(0,0,0,0.04);
   --shadow-lg: 0 10px 25px rgba(0,0,0,0.1), 0 4px 10px rgba(0,0,0,0.05);
 
-  /* Typography */
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-mono: 'JetBrains Mono', Consolas, Menlo, Monaco, monospace;
 }
@@ -89,9 +84,7 @@ html, body {
   font-family: var(--font-mono);
 }
 
-/* ==========================================================================
-   Main Application Layout
-   ========================================================================== */
+/* App Container */
 .abb-app-container {
   display: flex;
   flex-direction: column;
@@ -99,7 +92,7 @@ html, body {
   width: 100%;
 }
 
-/* Top Header Bar */
+/* Header */
 .abb-header {
   height: 60px;
   background-color: var(--bg-surface);
@@ -124,9 +117,9 @@ html, body {
   background-color: var(--abb-red);
   color: #FFFFFF;
   font-weight: 900;
-  font-size: 18px;
+  font-size: 16px;
   letter-spacing: -0.5px;
-  padding: 3px 10px;
+  padding: 4px 12px;
   border-radius: 4px;
   display: inline-flex;
   align-items: center;
@@ -171,9 +164,6 @@ html, body {
   font-family: inherit;
   transition: all 0.15s ease;
 }
-.abb-select:hover {
-  border-color: var(--text-dim);
-}
 
 .abb-icon-btn {
   background-color: var(--bg-surface-alt);
@@ -189,11 +179,7 @@ html, body {
 }
 .abb-icon-btn:hover {
   color: var(--text-main);
-  background-color: var(--border-color-subtle);
   border-color: var(--text-dim);
-}
-.abb-icon-btn.active {
-  color: var(--color-good);
 }
 
 .abb-time-badge {
@@ -207,9 +193,7 @@ html, body {
   border-radius: 6px;
 }
 
-/* ==========================================================================
-   Sidebar & Body Layout
-   ========================================================================== */
+/* Layout */
 .abb-body-layout {
   display: flex;
   flex: 1;
@@ -219,9 +203,8 @@ html, body {
   min-height: calc(100vh - 60px);
 }
 
-/* Left Sidebar Navigation */
 .abb-sidebar {
-  width: 100px;
+  width: 105px;
   background-color: var(--bg-surface);
   border-right: 1px solid var(--border-color);
   display: flex;
@@ -248,37 +231,24 @@ html, body {
   position: relative;
   text-decoration: none;
 }
-
 .abb-nav-item:hover {
   background-color: var(--bg-surface-alt);
   color: var(--text-main);
 }
-
 .abb-nav-item.active {
   background-color: var(--abb-red-soft);
   border-color: var(--abb-red-border);
   color: var(--abb-red);
 }
 
-.abb-nav-item.active .abb-nav-icon {
-  color: var(--abb-red);
-}
-
 .abb-nav-icon {
   margin-bottom: 5px;
-  transition: transform 0.15s ease;
 }
-.abb-nav-item:hover .abb-nav-icon {
-  transform: translateY(-1px);
-}
-
 .abb-nav-label {
   font-size: 10px;
   font-weight: 700;
   text-align: center;
   line-height: 1.2;
-  white-space: normal;
-  max-width: 80px;
 }
 
 .abb-nav-dot {
@@ -289,7 +259,6 @@ html, body {
   height: 7px;
   border-radius: 50%;
 }
-
 .abb-nav-badge {
   position: absolute;
   top: 4px;
@@ -310,7 +279,6 @@ html, body {
   padding-top: 8px;
 }
 
-/* Main Content Workspace */
 .abb-main-content {
   flex: 1;
   padding: 24px;
@@ -318,9 +286,7 @@ html, body {
   min-width: 0;
 }
 
-/* ==========================================================================
-   Cards, Grid & Industrial Layout Components
-   ========================================================================== */
+/* Cards & Grid */
 .abb-card {
   background-color: var(--bg-surface);
   border: 1px solid var(--border-color);
@@ -364,13 +330,11 @@ html, body {
   grid-template-columns: repeat(2, 1fr);
   gap: 20px;
 }
-
 .abb-grid-3 {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 20px;
 }
-
 .abb-grid-4 {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -383,7 +347,6 @@ html, body {
   }
 }
 
-/* Badges & Tags */
 .abb-status-badge {
   display: inline-flex;
   align-items: center;
@@ -395,27 +358,45 @@ html, body {
   font-family: var(--font-mono);
   text-transform: uppercase;
 }
-.abb-status-badge.good {
-  background-color: var(--color-good-bg);
-  color: var(--color-good);
-}
-.abb-status-badge.warn {
-  background-color: var(--color-warn-bg);
-  color: var(--color-warn);
-}
-.abb-status-badge.crit {
-  background-color: var(--color-crit-bg);
-  color: var(--color-crit);
+.abb-status-badge.good { background-color: var(--color-good-bg); color: var(--color-good); }
+.abb-status-badge.warn { background-color: var(--color-warn-bg); color: var(--color-warn); }
+.abb-status-badge.crit { background-color: var(--color-crit-bg); color: var(--color-crit); }
+
+/* 3D Scene Viewport */
+.abb-3d-viewport {
+  width: 100%;
+  height: 420px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: radial-gradient(circle at center, #242b35 0%, #12161c 100%);
+  border: 1px solid var(--border-color);
+  position: relative;
+  margin-bottom: 20px;
 }
 
-/* ==========================================================================
-   Conveyor Schematic & Callouts (Home View)
-   ========================================================================== */
+/* 3D Overlay Callout Card */
+.abb-3d-pin-card {
+  background-color: var(--bg-surface);
+  border: 1.5px solid var(--border-color);
+  border-radius: 8px;
+  padding: 6px 10px;
+  min-width: 120px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+  pointer-events: auto;
+  cursor: pointer;
+  transition: transform 0.15s ease;
+  user-select: none;
+}
+.abb-3d-pin-card:hover {
+  transform: scale(1.05);
+}
+
+/* 2D Schematic Wrapper */
 .abb-schematic-wrapper {
   background-color: var(--bg-surface-alt);
   border: 1px solid var(--border-color);
   border-radius: 8px;
-  height: 380px;
+  height: 360px;
   position: relative;
   overflow: hidden;
   margin-bottom: 20px;
@@ -429,7 +410,6 @@ html, body {
   padding: 16px;
 }
 
-/* Interactive Sensor Callout Box on Conveyor */
 .abb-callout-node {
   position: absolute;
   transform: translateX(-50%);
@@ -440,7 +420,7 @@ html, body {
   width: 140px;
   box-shadow: var(--shadow-md);
   cursor: pointer;
-  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
   z-index: 10;
 }
 .abb-callout-node:hover {
@@ -457,7 +437,6 @@ html, body {
   justify-content: space-between;
   margin-bottom: 4px;
 }
-
 .abb-callout-title {
   font-size: 11px;
   font-weight: 700;
@@ -466,7 +445,6 @@ html, body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-
 .abb-callout-code {
   font-size: 9px;
   font-weight: 800;
@@ -481,7 +459,6 @@ html, body {
   align-items: baseline;
   justify-content: space-between;
 }
-
 .abb-callout-val {
   font-family: var(--font-mono);
   font-size: 14px;
@@ -496,7 +473,6 @@ html, body {
   color: var(--text-dim);
   font-weight: 600;
 }
-
 .abb-callout-sub {
   font-size: 9px;
   color: var(--text-muted);
@@ -506,9 +482,48 @@ html, body {
   margin-top: 2px;
 }
 
-/* ==========================================================================
-   Analog Dial Gauges (Speed & Slippage)
-   ========================================================================== */
+/* SH1106 OLED Display Simulated Widget (128x64) */
+.oled-container {
+  background-color: #000000;
+  border: 4px solid #333333;
+  border-radius: 8px;
+  padding: 8px 12px;
+  width: 256px;
+  height: 128px;
+  color: #FFFFFF;
+  font-family: 'JetBrains Mono', monospace;
+  box-shadow: inset 0 0 10px rgba(255, 255, 255, 0.1), 0 4px 12px rgba(0,0,0,0.5);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  user-select: none;
+  position: relative;
+  overflow: hidden;
+}
+
+.oled-border-frame {
+  border: 1px solid #FFFFFF;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 4px 6px;
+}
+
+.oled-scroll-text {
+  white-space: nowrap;
+  font-size: 9px;
+  animation: oled-marquee 8s linear infinite;
+  display: inline-block;
+}
+
+@keyframes oled-marquee {
+  0% { transform: translateX(100%); }
+  100% { transform: translateX(-100%); }
+}
+
+/* Dial Gauge */
 .abb-dial-gauge-card {
   background-color: var(--bg-surface);
   border: 1px solid var(--border-color);
@@ -519,7 +534,6 @@ html, body {
   align-items: center;
   justify-content: center;
 }
-
 .abb-dial-title {
   font-size: 12px;
   font-weight: 700;
@@ -527,7 +541,6 @@ html, body {
   text-transform: uppercase;
   margin-bottom: 8px;
 }
-
 .abb-gauge-svg-wrap {
   width: 170px;
   height: 170px;
@@ -536,12 +549,10 @@ html, body {
   align-items: center;
   justify-content: center;
 }
-
 .abb-gauge-needle {
   transform-origin: 50% 50%;
   transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
-
 .abb-gauge-center-readout {
   position: absolute;
   bottom: 24px;
@@ -549,36 +560,30 @@ html, body {
   flex-direction: column;
   align-items: center;
 }
-
 .abb-gauge-val {
   font-family: var(--font-mono);
   font-size: 20px;
   font-weight: 800;
 }
-
 .abb-gauge-unit {
   font-size: 11px;
   font-weight: 600;
   color: var(--text-dim);
 }
 
-/* ==========================================================================
-   Table & Alarms
-   ========================================================================== */
+/* Table */
 .abb-table-wrapper {
   width: 100%;
   overflow-x: auto;
   border: 1px solid var(--border-color);
   border-radius: 8px;
 }
-
 .abb-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 12px;
   text-align: left;
 }
-
 .abb-table th {
   background-color: var(--bg-surface-alt);
   color: var(--text-dim);
@@ -587,22 +592,15 @@ html, body {
   padding: 12px 16px;
   border-bottom: 1px solid var(--border-color);
 }
-
 .abb-table td {
   padding: 12px 16px;
   border-bottom: 1px solid var(--border-color-subtle);
   color: var(--text-main);
 }
+.abb-table tr:last-child td { border-bottom: none; }
+.abb-table tr:hover td { background-color: var(--bg-surface-alt); }
 
-.abb-table tr:last-child td {
-  border-bottom: none;
-}
-
-.abb-table tr:hover td {
-  background-color: var(--bg-surface-alt);
-}
-
-/* Buttons */
+/* Buttons & Inputs */
 .abb-btn {
   display: inline-flex;
   align-items: center;
@@ -642,7 +640,6 @@ html, body {
   border-color: var(--color-crit);
 }
 
-/* Inputs */
 .abb-input {
   background-color: var(--bg-input);
   border: 1px solid var(--border-color);
@@ -652,13 +649,12 @@ html, body {
   font-size: 12px;
   font-family: inherit;
   outline: none;
-  transition: border-color 0.15s ease;
 }
 .abb-input:focus {
   border-color: var(--abb-red);
 }
 
-/* Animation Keyframes */
+/* Animations */
 @keyframes flow-right {
   0% { transform: translateX(0); opacity: 0.2; }
   10% { opacity: 0.95; }
