@@ -44,19 +44,17 @@ import {
   ShieldCheck,
   Sparkles,
   Cpu,
-  Radio,
-  Sliders,
-  Move3d,
-  LayoutGrid,
+  Trash2,
+  FileSpreadsheet,
 } from "lucide-react";
 
 // ---------------------------------------------------------------------------
-// ESP32 Hardware Pin & Sensor Definitions
+// ESP32 Hardware Pin & Sensor Definitions (Vibration Threshold @ 800 ADC)
 // ---------------------------------------------------------------------------
 const SENSOR_DEFS = [
   {
     id: "misalignment",
-    label: "Misalignment",
+    label: "IR Misalignment",
     abbCode: "IR 32/33",
     hardware: "Infrared (IR) Optical Edge Beam",
     hardwareType: "IR Sensor (PIN 32, 33)",
@@ -67,6 +65,7 @@ const SENSOR_DEFS = [
     nominal: 5.4,
     nodeX: -3.2,
     nodeY: 0.65,
+    threshold: "25.0 mm",
     zones: [
       { from: 0, to: 12, sev: "good" },
       { from: 12, to: 25, sev: "warn" },
@@ -86,6 +85,7 @@ const SENSOR_DEFS = [
     nominal: 96.5,
     nodeX: -0.8,
     nodeY: -0.65,
+    threshold: "70.0%",
     zones: [
       { from: 40, to: 70, sev: "crit" },
       { from: 70, to: 88, sev: "warn" },
@@ -98,13 +98,14 @@ const SENSOR_DEFS = [
     abbCode: "PROX 27",
     hardware: "Inductive Proximity Sensor",
     hardwareType: "Proximity Sensor (PIN 27)",
-    method: "Object in Belt Zone & Pulley Motion",
+    method: "Object in Belt Zone & Motion Pulses",
     icon: Gauge,
     unit: "m/s",
     decimals: 2,
     nominal: 2.35,
     nodeX: 4.8,
     nodeY: 0.65,
+    threshold: "1.5 m/s",
     zones: [
       { from: 0, to: 1.5, sev: "crit" },
       { from: 1.5, to: 1.9, sev: "warn" },
@@ -123,18 +124,19 @@ const SENSOR_DEFS = [
     icon: Waves,
     unit: "ADC",
     decimals: 0,
-    nominal: 420,
+    nominal: 350,
     nodeX: 3.2,
     nodeY: 0.65,
+    threshold: "800 ADC", // Reduced threshold to 800 ADC from 1500
     zones: [
-      { from: 0, to: 1100, sev: "good" },
-      { from: 1100, to: 1500, sev: "warn" },
-      { from: 1500, to: 4095, sev: "crit" },
+      { from: 0, to: 500, sev: "good" },
+      { from: 500, to: 800, sev: "warn" },
+      { from: 800, to: 4095, sev: "crit" },
     ],
   },
   {
     id: "temperature",
-    label: "Bearing Temperature",
+    label: "MLX90614 Temp",
     abbCode: "MLX90614",
     hardware: "Adafruit MLX90614 Non-Contact IR",
     hardwareType: "MLX90614 IR Temp (I2C)",
@@ -145,6 +147,7 @@ const SENSOR_DEFS = [
     nominal: 34.2,
     nodeX: 5.6,
     nodeY: 0.9,
+    threshold: "40.0 °C",
     zones: [
       { from: 20, to: 35, sev: "good" },
       { from: 35, to: 40, sev: "warn" },
@@ -189,12 +192,13 @@ function playAlertChime() {
 }
 
 // ---------------------------------------------------------------------------
-// 3D Three.js Conveyor Model & Sensor Digital Twin
+// 3D Three.js Conveyor Model (Static Edge Rollers / Pulleys)
 // ---------------------------------------------------------------------------
 const BELT_X_MIN = -6.2;
 const BELT_X_MAX = 6.2;
 
-function Roller3D({ x, speedRef, color = "#64748b" }) {
+// Intermediate support rollers rotate with belt motion
+function InternalRoller3D({ x, speedRef, color = "#64748b" }) {
   const ref = useRef();
   useFrame((_, delta) => {
     if (ref.current) ref.current.rotation.z -= speedRef.current * 7 * delta;
@@ -207,24 +211,31 @@ function Roller3D({ x, speedRef, color = "#64748b" }) {
   );
 }
 
-function Pulley3D({ x, radius = 0.65, speedRef, color = "#475569" }) {
-  const ref = useRef();
-  useFrame((_, delta) => {
-    if (ref.current) ref.current.rotation.z -= speedRef.current * 4.5 * delta;
-  });
+// Edge Rollers / End Pulleys are completely STATIC per requirement
+function StaticEdgeRoller3D({ x, radius = 0.65, color = "#FF000F" }) {
   return (
     <group position={[x, 0, 0]}>
-      <mesh ref={ref} rotation={[Math.PI / 2, 0, 0]} castShadow receiveShadow>
+      {/* Static Heavy-duty Drum */}
+      <mesh rotation={[Math.PI / 2, 0, 0]} castShadow receiveShadow>
         <cylinderGeometry args={[radius, radius, 2.2, 32]} />
         <meshStandardMaterial color={color} metalness={0.8} roughness={0.25} />
       </mesh>
-      {/* Pulley Shaft End Caps */}
-      <mesh position={[0, 0, 1.2]} rotation={[Math.PI / 2, 0, 0]}>
-        <cylinderGeometry args={[0.15, 0.15, 0.3, 16]} />
+      {/* Static Pillow Block Bearing Mounts */}
+      <mesh position={[0, -0.4, 1.25]}>
+        <boxGeometry args={[0.5, 0.9, 0.25]} />
+        <meshStandardMaterial color="#334155" metalness={0.8} roughness={0.3} />
+      </mesh>
+      <mesh position={[0, -0.4, -1.25]}>
+        <boxGeometry args={[0.5, 0.9, 0.25]} />
+        <meshStandardMaterial color="#334155" metalness={0.8} roughness={0.3} />
+      </mesh>
+      {/* Shaft End Caps */}
+      <mesh position={[0, 0, 1.25]} rotation={[Math.PI / 2, 0, 0]}>
+        <cylinderGeometry args={[0.15, 0.15, 0.35, 16]} />
         <meshStandardMaterial color="#94a3b8" metalness={0.9} roughness={0.1} />
       </mesh>
-      <mesh position={[0, 0, -1.2]} rotation={[Math.PI / 2, 0, 0]}>
-        <cylinderGeometry args={[0.15, 0.15, 0.3, 16]} />
+      <mesh position={[0, 0, -1.25]} rotation={[Math.PI / 2, 0, 0]}>
+        <cylinderGeometry args={[0.15, 0.15, 0.35, 16]} />
         <meshStandardMaterial color="#94a3b8" metalness={0.9} roughness={0.1} />
       </mesh>
     </group>
@@ -234,12 +245,10 @@ function Pulley3D({ x, radius = 0.65, speedRef, color = "#475569" }) {
 function ConveyorBelt3D({ beltColor = "#1e293b" }) {
   return (
     <group>
-      {/* Top Strand */}
       <mesh position={[0, 0.65, 0]} receiveShadow castShadow>
         <boxGeometry args={[BELT_X_MAX - BELT_X_MIN + 1.3, 0.12, 1.9]} />
         <meshStandardMaterial color={beltColor} roughness={0.85} metalness={0.1} />
       </mesh>
-      {/* Bottom Return Strand */}
       <mesh position={[0, -0.65, 0]} receiveShadow>
         <boxGeometry args={[BELT_X_MAX - BELT_X_MIN + 1.3, 0.1, 1.8]} />
         <meshStandardMaterial color={beltColor} roughness={0.9} metalness={0.1} opacity={0.9} transparent />
@@ -280,12 +289,10 @@ function LaserBeam3D({ laserActive }) {
   if (!laserActive) return null;
   return (
     <group position={[-1.2, 0.85, 0]}>
-      {/* Laser Emitter Head */}
       <mesh position={[0, 0.4, 1.3]} rotation={[Math.PI / 2, 0, 0]}>
         <cylinderGeometry args={[0.08, 0.08, 0.3, 16]} />
         <meshStandardMaterial color="#FF000F" emissive="#FF000F" emissiveIntensity={0.8} />
       </mesh>
-      {/* Glowing 3D Laser Beam Line across conveyor */}
       <mesh position={[0, 0.4, 0]} rotation={[Math.PI / 2, 0, 0]}>
         <cylinderGeometry args={[0.015, 0.015, 2.6, 12]} />
         <meshStandardMaterial color="#FF000F" emissive="#FF000F" emissiveIntensity={2.5} transparent opacity={0.9} />
@@ -302,12 +309,10 @@ function SensorPin3D({ s, st, goTo }) {
 
   return (
     <group position={[s.nodeX, s.nodeY, 0]}>
-      {/* Vertical Pin Line */}
       <mesh position={[0, 0.6, 0]}>
         <cylinderGeometry args={[0.02, 0.02, 1.2, 8]} />
         <meshStandardMaterial color="#64748b" />
       </mesh>
-      {/* Glowing Marker Sphere */}
       <mesh
         position={[0, 1.2, 0]}
         scale={hovered ? 1.3 : 1}
@@ -318,7 +323,6 @@ function SensorPin3D({ s, st, goTo }) {
         <sphereGeometry args={[0.16, 16, 16]} />
         <meshStandardMaterial color={sevColor} emissive={sevColor} emissiveIntensity={sev === "good" ? 0.3 : 1.2} />
       </mesh>
-      {/* HTML Callout Badge in 3D Space */}
       <Html position={[0, 1.6, 0]} center distanceFactor={10} style={{ pointerEvents: "none" }}>
         <div
           className="abb-3d-pin-card"
@@ -365,31 +369,29 @@ function Conveyor3DScene({ sensorState, laserActive, speedMps, goTo }) {
       </Suspense>
 
       <group position={[0, -0.4, 0]}>
-        {/* Head Drive Pulley (Right) */}
-        <Pulley3D x={BELT_X_MAX} radius={0.65} speedRef={speedRef} color="#FF000F" />
-        {/* Tail Pulley (Left) */}
-        <Pulley3D x={BELT_X_MIN} radius={0.65} speedRef={speedRef} color="#475569" />
+        {/* Edge Rollers (Pulleys at ends are STATIC) */}
+        <StaticEdgeRoller3D x={BELT_X_MAX} radius={0.65} color="#FF000F" />
+        <StaticEdgeRoller3D x={BELT_X_MIN} radius={0.65} color="#475569" />
 
-        {/* Support Rollers */}
+        {/* Rotating Internal Rollers */}
         {rollerXs.map((rx) => (
-          <Roller3D key={rx} x={rx} speedRef={speedRef} />
+          <InternalRoller3D key={rx} x={rx} speedRef={speedRef} />
         ))}
 
-        {/* Rubber Belt Loop */}
+        {/* Rubber Conveyor Belt */}
         <ConveyorBelt3D beltColor="#1e293b" />
 
-        {/* Material Chunks moving on belt */}
+        {/* Moving Material particles */}
         {speedMps > 0.3 && <MaterialParticles3D speedRef={speedRef} color="#FF000F" />}
 
-        {/* 3D Laser Alignment Beam */}
+        {/* Laser alignment beam */}
         <LaserBeam3D laserActive={laserActive} />
 
-        {/* 3D Interactive Sensor Pins */}
+        {/* 3D Sensor Callout Pins */}
         {SENSOR_DEFS.map((s) => (
           <SensorPin3D key={s.id} s={s} st={sensorState[s.id]} goTo={goTo} />
         ))}
 
-        {/* Shadow Floor */}
         <ContactShadows position={[0, -1.4, 0]} opacity={0.5} scale={18} blur={2.4} far={3} />
       </group>
 
@@ -399,7 +401,7 @@ function Conveyor3DScene({ sensorState, laserActive, speedMps, goTo }) {
 }
 
 // ---------------------------------------------------------------------------
-// Simulated Adafruit SH1106G (128x64) OLED Display Component
+// Simulated Adafruit SH1106G (128x64) OLED Screen
 // ---------------------------------------------------------------------------
 function OledDisplayWidget({ currentState, tempC, laserState, piezoVal, irLeft, irRight, magState, proxState }) {
   return (
@@ -455,7 +457,7 @@ function OledDisplayWidget({ currentState, tempC, laserState, piezoVal, irLeft, 
               />
             ))}
           </div>
-          <span style={{ fontSize: 8, textAlign: "right" }}>PEAK: {piezoVal} ADC</span>
+          <span style={{ fontSize: 8, textAlign: "right" }}>PEAK: {piezoVal} ADC (TH: 800)</span>
         </div>
       )}
 
@@ -497,7 +499,7 @@ function OledDisplayWidget({ currentState, tempC, laserState, piezoVal, irLeft, 
 }
 
 // ---------------------------------------------------------------------------
-// View 1: Home Screen (3D Digital Twin Centerpiece + Live Telemetry)
+// View 1: Home View (3D Conveyor + Live Stimulator)
 // ---------------------------------------------------------------------------
 function HomeView({
   sensorState,
@@ -512,7 +514,6 @@ function HomeView({
   segWarn,
   segCrit,
   isEspConnected,
-  espEndpoint,
   laserState,
   toggleLaser,
   currentState,
@@ -535,7 +536,6 @@ function HomeView({
 
   return (
     <div>
-      {/* Top Banner with Quick Actions */}
       <div className="abb-card" style={{ padding: "16px 20px" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 16 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
@@ -555,21 +555,15 @@ function HomeView({
                 )}
               </div>
               <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>
-                Three.js 3D Digital Twin · Real-time ESP32 edge telemetry channels
+                Static Edge Rollers · Piezo Threshold: 800 ADC · Individual Sensor Log Storage
               </p>
             </div>
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            {/* Laser Button matching Button Pin 14 */}
-            <button
-              onClick={toggleLaser}
-              className={`abb-btn ${laserState ? "primary" : ""}`}
-              style={{ padding: "8px 14px", fontSize: 12 }}
-            >
+            <button onClick={toggleLaser} className={`abb-btn ${laserState ? "primary" : ""}`} style={{ padding: "8px 14px", fontSize: 12 }}>
               <Zap size={14} /> Laser (PIN 26): <strong>{laserState ? "ON" : "OFF"}</strong>
             </button>
-
             <button
               onClick={() => goTo("settings")}
               className="abb-btn"
@@ -586,7 +580,7 @@ function HomeView({
         </div>
       </div>
 
-      {/* 3D Three.js Conveyor Centerpiece */}
+      {/* 3D Conveyor Canvas */}
       <div className="abb-card">
         <div className="abb-card-header">
           <div className="abb-card-title-group">
@@ -594,11 +588,10 @@ function HomeView({
             <span className="abb-card-title">Info X 3D Conveyor Layout &amp; Sensor Telemetry</span>
           </div>
           <span style={{ fontSize: 11, color: "var(--text-dim)", fontFamily: "var(--font-mono)" }}>
-            Drag to orbit 360° · scroll to zoom · click pins for details
+            Static Edge Pulleys · Orbit 360° · Click sensor pins for channel logs
           </span>
         </div>
 
-        {/* 3D Canvas */}
         <div className="abb-3d-viewport">
           <Canvas shadows camera={{ position: [0.5, 3.8, 10.5], fov: 40 }}>
             <Conveyor3DScene sensorState={sensorState} laserActive={laserState} speedMps={speedVal} goTo={goTo} />
@@ -617,16 +610,15 @@ function HomeView({
               backdropFilter: "blur(4px)",
             }}
           >
-            3D THREE.JS TWIN · MLX90614, IR, PIEZO, HALL &amp; PROX PINS
+            3D THREE.JS TWIN · STATIC EDGE ROLLERS · REAL-TIME SENSOR NODES
           </div>
         </div>
 
-        {/* Bottom Hardware Strip: OLED Preview + Health Gauge + ESP32 Live Control */}
+        {/* Bottom Hardware Strip */}
         <div className="abb-grid-3" style={{ borderTop: "1px solid var(--border-color)", paddingTop: 20 }}>
-          {/* 1. Live SH1106 OLED Display Screen */}
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
             <span style={{ fontSize: 12, fontWeight: 800, textTransform: "uppercase", color: "var(--text-muted)" }}>
-              SH1106 OLED (128x64) Live Screen
+              SH1106 OLED (128x64) Screen
             </span>
             <OledDisplayWidget
               currentState={currentState}
@@ -640,50 +632,15 @@ function HomeView({
             />
           </div>
 
-          {/* 2. Health Donut Chart */}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 16 }}>
             <div style={{ width: 100, height: 100, position: "relative", display: "flex", alignItems: "center", justifyContent: "center" }}>
               <svg width="100" height="100" viewBox="0 0 100 100">
                 <circle cx="50" cy="50" r="38" fill="none" stroke="var(--border-color)" strokeWidth="10" />
-                <circle
-                  cx="50"
-                  cy="50"
-                  r="38"
-                  fill="none"
-                  stroke="var(--color-good)"
-                  strokeWidth="10"
-                  strokeDasharray={`${segGood} ${donutCirc - segGood}`}
-                  strokeDashoffset="0"
-                  transform="rotate(-90 50 50)"
-                />
-                <circle
-                  cx="50"
-                  cy="50"
-                  r="38"
-                  fill="none"
-                  stroke="var(--color-warn)"
-                  strokeWidth="10"
-                  strokeDasharray={`${segWarn} ${donutCirc - segWarn}`}
-                  strokeDashoffset={-segGood}
-                  transform="rotate(-90 50 50)"
-                />
-                <circle
-                  cx="50"
-                  cy="50"
-                  r="38"
-                  fill="none"
-                  stroke="var(--color-crit)"
-                  strokeWidth="10"
-                  strokeDasharray={`${segCrit} ${donutCirc - segCrit}`}
-                  strokeDashoffset={-(segGood + segWarn)}
-                  transform="rotate(-90 50 50)"
-                />
-                <text x="50" y="48" textAnchor="middle" fontSize="18" className="mono" fill="var(--text-main)" fontWeight="800">
-                  {healthScore}%
-                </text>
-                <text x="50" y="62" textAnchor="middle" fontSize="7" fill="var(--text-muted)" fontWeight="700">
-                  HEALTH
-                </text>
+                <circle cx="50" cy="50" r="38" fill="none" stroke="var(--color-good)" strokeWidth="10" strokeDasharray={`${segGood} ${donutCirc - segGood}`} strokeDashoffset="0" transform="rotate(-90 50 50)" />
+                <circle cx="50" cy="50" r="38" fill="none" stroke="var(--color-warn)" strokeWidth="10" strokeDasharray={`${segWarn} ${donutCirc - segWarn}`} strokeDashoffset={-segGood} transform="rotate(-90 50 50)" />
+                <circle cx="50" cy="50" r="38" fill="none" stroke="var(--color-crit)" strokeWidth="10" strokeDasharray={`${segCrit} ${donutCirc - segCrit}`} strokeDashoffset={-(segGood + segWarn)} transform="rotate(-90 50 50)" />
+                <text x="50" y="48" textAnchor="middle" fontSize="18" className="mono" fill="var(--text-main)" fontWeight="800">{healthScore}%</text>
+                <text x="50" y="62" textAnchor="middle" fontSize="7" fill="var(--text-muted)" fontWeight="700">HEALTH</text>
               </svg>
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 11 }}>
@@ -700,7 +657,6 @@ function HomeView({
             </div>
           </div>
 
-          {/* 3. Real-time ESP32 Sensor Hardware Controllers */}
           <div style={{ backgroundColor: "var(--bg-surface-alt)", border: "1px solid var(--border-color)", borderRadius: 8, padding: 12, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <span style={{ fontSize: 11, fontWeight: 800, textTransform: "uppercase" }}>ESP32 Sensor Stimulator</span>
@@ -708,50 +664,23 @@ function HomeView({
             </div>
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, margin: "8px 0" }}>
-              <button
-                onClick={() => setIrLeft(irLeft === 1 ? 0 : 1)}
-                className={`abb-btn ${irLeft === 0 ? "crit" : ""}`}
-                style={{ padding: "4px 8px", fontSize: 10 }}
-              >
+              <button onClick={() => setIrLeft(irLeft === 1 ? 0 : 1)} className={`abb-btn ${irLeft === 0 ? "crit" : ""}`} style={{ padding: "4px 8px", fontSize: 10 }}>
                 IR Left (32): {irLeft === 0 ? "BLOCKED" : "CLEAR"}
               </button>
-
-              <button
-                onClick={() => setIrRight(irRight === 1 ? 0 : 1)}
-                className={`abb-btn ${irRight === 0 ? "crit" : ""}`}
-                style={{ padding: "4px 8px", fontSize: 10 }}
-              >
+              <button onClick={() => setIrRight(irRight === 1 ? 0 : 1)} className={`abb-btn ${irRight === 0 ? "crit" : ""}`} style={{ padding: "4px 8px", fontSize: 10 }}>
                 IR Right (33): {irRight === 0 ? "BLOCKED" : "CLEAR"}
               </button>
-
-              <button
-                onClick={triggerPiezoSpike}
-                className={`abb-btn ${piezoVal > 1500 ? "crit" : ""}`}
-                style={{ padding: "4px 8px", fontSize: 10 }}
-              >
-                Piezo (34): {piezoVal > 1500 ? "BURST" : "BURST SPIKE"}
+              <button onClick={triggerPiezoSpike} className={`abb-btn ${piezoVal > 800 ? "crit" : ""}`} style={{ padding: "4px 8px", fontSize: 10 }}>
+                Piezo (34): {piezoVal > 800 ? "BURST >800" : "BURST SPIKE"}
               </button>
-
-              <button
-                onClick={() => setMagState(magState === 1 ? 0 : 1)}
-                className={`abb-btn ${magState === 0 ? "crit" : ""}`}
-                style={{ padding: "4px 8px", fontSize: 10 }}
-              >
+              <button onClick={() => setMagState(magState === 1 ? 0 : 1)} className={`abb-btn ${magState === 0 ? "crit" : ""}`} style={{ padding: "4px 8px", fontSize: 10 }}>
                 Hall (35): {magState === 0 ? "ANOMALY" : "NORMAL"}
               </button>
             </div>
 
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: 10, borderTop: "1px solid var(--border-color)", paddingTop: 6 }}>
               <span>MLX90614 Temp: <strong>{tempC.toFixed(1)}°C</strong></span>
-              <input
-                type="range"
-                min="25"
-                max="55"
-                step="0.5"
-                value={tempC}
-                onChange={(e) => setTempC(Number(e.target.value))}
-                style={{ width: 80 }}
-              />
+              <input type="range" min="25" max="55" step="0.5" value={tempC} onChange={(e) => setTempC(Number(e.target.value))} style={{ width: 80 }} />
             </div>
           </div>
         </div>
@@ -761,7 +690,205 @@ function HomeView({
 }
 
 // ---------------------------------------------------------------------------
-// Root Component (INFO X - Intelligent Belt Monitoring System)
+// Individual Sensor Critical Alarm Log Table Component
+// ---------------------------------------------------------------------------
+function SensorCriticalLogTable({ sensorDef, logs, onClear, onExport }) {
+  const exportCSV = () => {
+    const header = "ID,Timestamp,Sensor,Hardware,Measured Output,Threshold,Severity,Cause,Action\n";
+    const rows = logs.map((l) =>
+      `"${l.id}","${l.timestamp}","${l.sensorName}","${l.hardware}","${l.outputValue}","${l.threshold || ''}","${l.severity}","${l.cause.replace(/"/g, '""')}","${l.action.replace(/"/g, '""')}"`
+    ).join("\n");
+    const blob = new Blob([header + rows], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `critical-logs-${sensorDef.id}-${Date.now()}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div className="abb-card" style={{ marginTop: 16 }}>
+      <div className="abb-card-header">
+        <div>
+          <span className="abb-card-title">{sensorDef.label} — Saved Critical Alarm Logs</span>
+          <p className="abb-card-subtitle">
+            Persisted individually in storage · {logs.length} critical incidents recorded
+          </p>
+        </div>
+        <div style={{ display: "flex", gap: 10 }}>
+          <button onClick={exportCSV} disabled={logs.length === 0} className="abb-btn">
+            <FileSpreadsheet size={13} /> Export {sensorDef.label} Logs (CSV)
+          </button>
+          <button onClick={() => onClear(sensorDef.id)} disabled={logs.length === 0} className="abb-btn warn">
+            <Trash2 size={13} /> Clear
+          </button>
+        </div>
+      </div>
+
+      {logs.length === 0 ? (
+        <div style={{ textAlign: "center", padding: "30px 10px", color: "var(--text-dim)", fontSize: 12 }}>
+          <CheckCircle2 size={24} color="var(--color-good)" style={{ margin: "0 auto 6px", opacity: 0.8 }} />
+          <span>No critical alarm incidents recorded for {sensorDef.label}.</span>
+        </div>
+      ) : (
+        <div className="abb-table-wrapper">
+          <table className="abb-table">
+            <thead>
+              <tr>
+                <th>Log ID</th>
+                <th>Timestamp</th>
+                <th>Hardware Output</th>
+                <th>Critical Threshold</th>
+                <th>Cause &amp; Root Incident</th>
+                <th>Recommended Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {logs.map((l) => (
+                <tr key={l.id}>
+                  <td className="mono" style={{ fontSize: 11, color: "var(--text-dim)" }}>{l.id}</td>
+                  <td className="mono" style={{ fontSize: 11 }}>{l.timestamp}</td>
+                  <td style={{ fontWeight: 800, color: "var(--color-crit)" }}>{l.outputValue}</td>
+                  <td className="mono" style={{ fontSize: 11, color: "var(--text-muted)" }}>{l.threshold}</td>
+                  <td style={{ fontSize: 11, color: "var(--text-main)" }}>{l.cause}</td>
+                  <td style={{ fontSize: 11, color: "var(--color-info)", fontWeight: 600 }}>{l.action}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Alarms & Events Registry View (Multi-Sensor Individual Logs)
+// ---------------------------------------------------------------------------
+function AlarmsRegistryView({ criticalLogs, onClearSensorLogs, buzzerActive }) {
+  const [activeTab, setActiveTab] = useState("all");
+
+  const allLogs = useMemo(() => {
+    let combined = [];
+    Object.keys(criticalLogs).forEach((key) => {
+      combined = [...combined, ...criticalLogs[key]];
+    });
+    return combined.sort((a, b) => b.timestampEpoch - a.timestampEpoch);
+  }, [criticalLogs]);
+
+  const exportAllCSV = () => {
+    const header = "ID,Timestamp,Sensor,Hardware,Measured Output,Threshold,Severity,Cause,Action\n";
+    const rows = allLogs.map((l) =>
+      `"${l.id}","${l.timestamp}","${l.sensorName}","${l.hardware}","${l.outputValue}","${l.threshold || ''}","${l.severity}","${l.cause.replace(/"/g, '""')}","${l.action.replace(/"/g, '""')}"`
+    ).join("\n");
+    const blob = new Blob([header + rows], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `all-critical-sensor-alarms-${Date.now()}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div className="abb-card">
+      <div className="abb-card-header">
+        <div>
+          <h1 style={{ fontSize: 16, fontWeight: 800 }}>Info X — Individual Sensor Critical Alarm Registry</h1>
+          <p className="abb-card-subtitle">
+            Every critical incident is permanently saved with exact output readings &amp; causes
+          </p>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span className={`abb-status-badge ${buzzerActive ? "crit" : "good"}`}>
+            {buzzerActive ? "BUZZER PIN 25 SOUNDING" : "BUZZER IDLE"}
+          </span>
+          <button onClick={exportAllCSV} disabled={allLogs.length === 0} className="abb-btn">
+            <Download size={13} /> Export All Sensors CSV
+          </button>
+        </div>
+      </div>
+
+      {/* Sensor Tab Selectors */}
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16, borderBottom: "1px solid var(--border-color)", paddingBottom: 12 }}>
+        <button
+          onClick={() => setActiveTab("all")}
+          className={`abb-btn ${activeTab === "all" ? "primary" : ""}`}
+          style={{ padding: "6px 12px" }}
+        >
+          All Critical Logs ({allLogs.length})
+        </button>
+
+        {SENSOR_DEFS.map((s) => {
+          const count = (criticalLogs[s.id] || []).length;
+          return (
+            <button
+              key={s.id}
+              onClick={() => setActiveTab(s.id)}
+              className={`abb-btn ${activeTab === s.id ? "primary" : ""}`}
+              style={{ padding: "6px 12px" }}
+            >
+              {s.label} ({count})
+            </button>
+          );
+        })}
+      </div>
+
+      {activeTab === "all" ? (
+        <div>
+          {allLogs.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "40px 10px", color: "var(--text-dim)" }}>
+              <CheckCircle2 size={32} color="var(--color-good)" style={{ margin: "0 auto 8px", opacity: 0.8 }} />
+              <p style={{ fontSize: 13, fontWeight: 700 }}>No critical alarm incidents recorded</p>
+              <p style={{ fontSize: 11 }}>All sensors are operating within their specified safety envelopes.</p>
+            </div>
+          ) : (
+            <div className="abb-table-wrapper">
+              <table className="abb-table">
+                <thead>
+                  <tr>
+                    <th>Log ID</th>
+                    <th>Timestamp</th>
+                    <th>Sensor Name</th>
+                    <th>Hardware Channel</th>
+                    <th>Measured Output</th>
+                    <th>Threshold</th>
+                    <th>Cause &amp; Diagnostics</th>
+                    <th>Action Required</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {allLogs.map((l) => (
+                    <tr key={l.id}>
+                      <td className="mono" style={{ fontSize: 11, color: "var(--text-dim)" }}>{l.id}</td>
+                      <td className="mono" style={{ fontSize: 11 }}>{l.timestamp}</td>
+                      <td style={{ fontWeight: 800 }}>{l.sensorName}</td>
+                      <td style={{ color: "var(--text-muted)", fontSize: 11 }}>{l.hardware}</td>
+                      <td style={{ fontWeight: 800, color: "var(--color-crit)" }}>{l.outputValue}</td>
+                      <td className="mono" style={{ fontSize: 11, color: "var(--text-dim)" }}>{l.threshold}</td>
+                      <td style={{ fontSize: 11 }}>{l.cause}</td>
+                      <td style={{ fontSize: 11, color: "var(--color-info)", fontWeight: 600 }}>{l.action}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      ) : (
+        <SensorCriticalLogTable
+          sensorDef={SENSOR_DEFS.find((s) => s.id === activeTab)}
+          logs={criticalLogs[activeTab] || []}
+          onClear={onClearSensorLogs}
+        />
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Root App Component
 // ---------------------------------------------------------------------------
 export default function BeltMonitorPro() {
   const [theme, setTheme] = useState("light");
@@ -771,33 +898,86 @@ export default function BeltMonitorPro() {
   const [language, setLanguage] = useState("English");
   const [now, setNow] = useState(new Date());
 
-  // ESP32 Hardware State Variables matching C++ Firmware
+  // ESP32 State Variables
   const [laserState, setLaserState] = useState(false);
   const [showLaserMsg, setShowLaserMsg] = useState(false);
   const [laserTimer, setLaserTimer] = useState(0);
-  const [piezoVal, setPiezoVal] = useState(420);
+  const [piezoVal, setPiezoVal] = useState(350);
   const [piezoTimer, setPiezoTimer] = useState(0);
   const [tempC, setTempC] = useState(34.2);
-  const [irLeft, setIrLeft] = useState(1); // 1 = HIGH (normal), 0 = LOW (misalignment)
+  const [irLeft, setIrLeft] = useState(1);
   const [irRight, setIrRight] = useState(1);
-  const [magState, setMagState] = useState(1); // 1 = HIGH, 0 = LOW (anomaly)
-  const [proxState, setProxState] = useState(1); // 1 = HIGH, 0 = LOW (object/motion)
+  const [magState, setMagState] = useState(1);
+  const [proxState, setProxState] = useState(1);
 
   const [espEndpoint, setEspEndpoint] = useState("http://localhost:5000/api/sensors");
   const [isEspConnected, setIsEspConnected] = useState(false);
   const [lastEspPayload, setLastEspPayload] = useState(null);
 
-  // Sensor state for charts & callouts
+  // Individual Critical Alarm Logs per sensor (stored in localStorage)
+  const [criticalLogs, setCriticalLogs] = useState(() => {
+    try {
+      const saved = localStorage.getItem("infox_critical_sensor_logs");
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return {
+      misalignment: [],
+      magnetic_hall: [],
+      proximity_speed: [],
+      vibration: [],
+      temperature: [],
+    };
+  });
+
+  const lastLoggedState = useRef({});
+
+  // Sensor data state for charts
   const [sensorState, setSensorState] = useState(() => {
     const init = {};
     SENSOR_DEFS.forEach((s) => {
-      init[s.id] = { value: s.nominal, history: makeHistory(s.nominal), severity: "good", fault: 0 };
+      init[s.id] = { value: s.nominal, history: makeHistory(s.nominal), severity: "good" };
     });
     return init;
   });
 
-  const [alarms, setAlarms] = useState([]);
-  const alarmId = useRef(1);
+  // Persist critical logs to localStorage whenever updated
+  useEffect(() => {
+    try {
+      localStorage.setItem("infox_critical_sensor_logs", JSON.stringify(criticalLogs));
+    } catch (e) {}
+  }, [criticalLogs]);
+
+  // Record an individual critical log entry for a specific sensor
+  const recordCriticalLog = useCallback((sensorId, outputValue, cause, action) => {
+    const sDef = SENSOR_DEFS.find((s) => s.id === sensorId);
+    if (!sDef) return;
+
+    const newLog = {
+      id: `CRIT-${sDef.abbCode.replace(/[^a-zA-Z0-9]/g, "")}-${Date.now().toString().slice(-6)}`,
+      timestamp: new Date().toLocaleString(),
+      timestampEpoch: Date.now(),
+      sensorId: sDef.id,
+      sensorName: sDef.label,
+      hardware: sDef.hardwareType,
+      outputValue: outputValue,
+      threshold: sDef.threshold,
+      severity: "CRITICAL",
+      cause: cause,
+      action: action,
+    };
+
+    setCriticalLogs((prev) => ({
+      ...prev,
+      [sensorId]: [newLog, ...(prev[sensorId] || [])].slice(0, 100),
+    }));
+  }, []);
+
+  const clearSensorLogs = useCallback((sensorId) => {
+    setCriticalLogs((prev) => ({
+      ...prev,
+      [sensorId]: [],
+    }));
+  }, []);
 
   // Button 14 toggle logic
   const toggleLaser = useCallback(() => {
@@ -810,51 +990,47 @@ export default function BeltMonitorPro() {
   }, []);
 
   const triggerPiezoSpike = useCallback(() => {
-    setPiezoVal(2850);
+    setPiezoVal(1850); // Spike above the new 800 ADC threshold
     setPiezoTimer(Date.now());
   }, []);
 
-  // Compute Current State (0 to 7) matching ESP32 firmware logic
+  // State selection matching C++ firmware (Vibration threshold @ 800)
   const currentState = useMemo(() => {
     if (showLaserMsg) return laserState ? 1 : 7;
-    if (Date.now() - piezoTimer < 3000) return 2;
+    if (Date.now() - piezoTimer < 3000 || piezoVal > 800) return 2;
     if (tempC > 40.0) return 3;
     if (irLeft === 0 || irRight === 0) return 4;
     if (magState === 0) return 5;
     if (proxState === 0) return 6;
     return 0;
-  }, [showLaserMsg, laserState, piezoTimer, tempC, irLeft, irRight, magState, proxState]);
+  }, [showLaserMsg, laserState, piezoTimer, piezoVal, tempC, irLeft, irRight, magState, proxState]);
 
-  // Buzzer logic
+  // Buzzer logic: threshold @ 800 for piezo
   const buzzerActive = useMemo(() => {
-    return irLeft === 0 || irRight === 0 || tempC > 40.0 || Date.now() - piezoTimer < 3000;
-  }, [irLeft, irRight, tempC, piezoTimer]);
+    return irLeft === 0 || irRight === 0 || tempC > 40.0 || piezoVal > 800 || Date.now() - piezoTimer < 3000;
+  }, [irLeft, irRight, tempC, piezoVal, piezoTimer]);
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
   }, [theme]);
 
-  // Laser timer auto-dismiss (2000ms duration)
   useEffect(() => {
     if (showLaserMsg) {
-      const t = setTimeout(() => {
-        setShowLaserMsg(false);
-      }, 2000);
+      const t = setTimeout(() => setShowLaserMsg(false), 2000);
       return () => clearTimeout(t);
     }
   }, [showLaserMsg, laserTimer]);
 
-  // Polling loop (Localhost ESP32 API / High-Fidelity Stimulation)
+  // Main Polling Loop
   useEffect(() => {
     const tick = setInterval(async () => {
       setNow(new Date());
 
-      // Decay piezo peak if expired
-      if (Date.now() - piezoTimer >= 3000 && piezoVal > 800) {
-        setPiezoVal(Math.round(350 + Math.random() * 120));
+      if (Date.now() - piezoTimer >= 3000 && piezoVal > 500) {
+        setPiezoVal(Math.round(300 + Math.random() * 100));
       }
 
-      // Try fetching from ESP32 Web Server if active
+      // Try fetching from real ESP32
       if (isEspConnected && espEndpoint) {
         try {
           const res = await fetch(espEndpoint, { signal: AbortSignal.timeout(1000) });
@@ -874,9 +1050,8 @@ export default function BeltMonitorPro() {
 
       setSensorState((prev) => {
         const next = {};
-        const newAlarms = [];
 
-        // Update misalignment
+        // 1. Misalignment
         const misVal = irLeft === 0 || irRight === 0 ? 32.5 : 5.4 + (Math.random() - 0.5) * 0.8;
         const misSev = severityOf(SENSOR_DEFS[0], misVal);
         next.misalignment = {
@@ -884,8 +1059,13 @@ export default function BeltMonitorPro() {
           severity: misSev,
           history: [...prev.misalignment.history.slice(1), { time: new Date().toLocaleTimeString(), v: +misVal.toFixed(1) }],
         };
+        if (misSev === "crit" && lastLoggedState.current.misalignment !== "crit") {
+          const zone = irLeft === 0 && irRight === 0 ? "Both Sides Blocked" : irLeft === 0 ? "Left Edge Blocked" : "Right Edge Blocked";
+          recordCriticalLog("misalignment", `${misVal.toFixed(1)} mm (${zone})`, "Lateral edge obstruction detected by IR beam PIN 32/33.", "Adjust conveyor training idlers and clear belt frame obstruction.");
+        }
+        lastLoggedState.current.misalignment = misSev;
 
-        // Update magnetic
+        // 2. Magnetic Hall
         const magVal = magState === 0 ? 55.0 : 96.5 + (Math.random() - 0.5) * 0.5;
         const magSev = severityOf(SENSOR_DEFS[1], magVal);
         next.magnetic_hall = {
@@ -893,8 +1073,12 @@ export default function BeltMonitorPro() {
           severity: magSev,
           history: [...prev.magnetic_hall.history.slice(1), { time: new Date().toLocaleTimeString(), v: +magVal.toFixed(1) }],
         };
+        if (magSev === "crit" && lastLoggedState.current.magnetic_hall !== "crit") {
+          recordCriticalLog("magnetic_hall", `${magVal.toFixed(1)}% Flux`, "Magnetic anomaly / field disturbance detected on Hall PIN 35.", "Inspect magnetic splice loop transponders for longitudinal tear.");
+        }
+        lastLoggedState.current.magnetic_hall = magSev;
 
-        // Update proximity speed
+        // 3. Proximity / Speed
         const speedVal = proxState === 0 ? 0.0 : 2.35 + (Math.random() - 0.5) * 0.05;
         const speedSev = severityOf(SENSOR_DEFS[2], speedVal);
         next.proximity_speed = {
@@ -902,8 +1086,12 @@ export default function BeltMonitorPro() {
           severity: speedSev,
           history: [...prev.proximity_speed.history.slice(1), { time: new Date().toLocaleTimeString(), v: +speedVal.toFixed(2) }],
         };
+        if (speedSev === "crit" && lastLoggedState.current.proximity_speed !== "crit") {
+          recordCriticalLog("proximity_speed", `${speedVal.toFixed(2)} m/s (ZERO MOTION)`, "Object in belt zone / pulley movement halted (PIN 27 LOW).", "Verify loading chute clearance and restart drive motor.");
+        }
+        lastLoggedState.current.proximity_speed = speedSev;
 
-        // Update vibration
+        // 4. Vibration (Threshold @ 800 ADC)
         const vibVal = piezoVal;
         const vibSev = severityOf(SENSOR_DEFS[3], vibVal);
         next.vibration = {
@@ -911,8 +1099,12 @@ export default function BeltMonitorPro() {
           severity: vibSev,
           history: [...prev.vibration.history.slice(1), { time: new Date().toLocaleTimeString(), v: vibVal }],
         };
+        if (vibSev === "crit" && lastLoggedState.current.vibration !== "crit") {
+          recordCriticalLog("vibration", `${vibVal} ADC Peak`, "Motor vibration exceeded critical limit (800 ADC threshold breached).", "Inspect drive motor mounting, gearbox alignment, and bearing wear.");
+        }
+        lastLoggedState.current.vibration = vibSev;
 
-        // Update temperature
+        // 5. MLX90614 Temperature
         const tempVal = tempC;
         const tempSev = severityOf(SENSOR_DEFS[4], tempVal);
         next.temperature = {
@@ -920,6 +1112,10 @@ export default function BeltMonitorPro() {
           severity: tempSev,
           history: [...prev.temperature.history.slice(1), { time: new Date().toLocaleTimeString(), v: +tempVal.toFixed(1) }],
         };
+        if (tempSev === "crit" && lastLoggedState.current.temperature !== "crit") {
+          recordCriticalLog("temperature", `${tempVal.toFixed(1)} °C`, "MLX90614 infrared object temp exceeded critical threshold (40.0 °C).", "Check motor bearing lubrication and cooling airflow.");
+        }
+        lastLoggedState.current.temperature = tempSev;
 
         if (buzzerActive && soundEnabled) {
           playAlertChime();
@@ -930,7 +1126,7 @@ export default function BeltMonitorPro() {
     }, tickMs);
 
     return () => clearInterval(tick);
-  }, [tickMs, isEspConnected, espEndpoint, piezoTimer, piezoVal, tempC, irLeft, irRight, magState, proxState, buzzerActive, soundEnabled]);
+  }, [tickMs, isEspConnected, espEndpoint, piezoTimer, piezoVal, tempC, irLeft, irRight, magState, proxState, buzzerActive, soundEnabled, recordCriticalLog]);
 
   // Derived health metrics
   const total = SENSOR_DEFS.length;
@@ -1015,7 +1211,7 @@ export default function BeltMonitorPro() {
 
           <button onClick={() => setActiveView("alarms")} className={`abb-nav-item ${activeView === "alarms" ? "active" : ""}`}>
             <Bell size={18} className="abb-nav-icon" />
-            <span className="abb-nav-label">Alarms</span>
+            <span className="abb-nav-label">Alarm Logs</span>
             {buzzerActive && <span className="abb-nav-badge">!</span>}
           </button>
 
@@ -1043,7 +1239,6 @@ export default function BeltMonitorPro() {
               segWarn={segWarn}
               segCrit={segCrit}
               isEspConnected={isEspConnected}
-              espEndpoint={espEndpoint}
               laserState={laserState}
               toggleLaser={toggleLaser}
               currentState={currentState}
@@ -1064,128 +1259,156 @@ export default function BeltMonitorPro() {
           )}
 
           {activeView === "misalignment" && (
-            <div className="abb-card">
-              <div className="abb-card-header">
-                <div>
-                  <h1 style={{ fontSize: 16, fontWeight: 800 }}>Misalignment Status (IR Sensors PIN 32 &amp; 33)</h1>
-                  <p className="abb-card-subtitle">Active Low edge beam detection</p>
+            <div>
+              <div className="abb-card">
+                <div className="abb-card-header">
+                  <div>
+                    <h1 style={{ fontSize: 16, fontWeight: 800 }}>IR Misalignment Status (PIN 32 &amp; 33)</h1>
+                    <p className="abb-card-subtitle">Active Low edge beam obstruction tracking</p>
+                  </div>
+                  <button onClick={() => setActiveView("home")} className="abb-btn">
+                    <ChevronLeft size={16} /> Back to 3D
+                  </button>
                 </div>
-                <button onClick={() => setActiveView("home")} className="abb-btn">
-                  <ChevronLeft size={16} /> Back to 3D
-                </button>
+                <div style={{ height: 240 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={sensorState.misalignment.history}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" opacity={0.5} />
+                      <XAxis dataKey="time" stroke="var(--text-dim)" fontSize={11} />
+                      <YAxis stroke="var(--text-dim)" fontSize={11} domain={[0, 45]} unit="mm" />
+                      <Tooltip contentStyle={{ backgroundColor: "var(--bg-surface)", borderColor: "var(--border-color)", borderRadius: 8 }} />
+                      <ReferenceLine y={25} stroke="var(--color-crit)" strokeDasharray="4 4" label="Trip (25mm)" />
+                      <Line type="monotone" dataKey="v" stroke="#3B82F6" strokeWidth={2.5} dot={false} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
               </div>
-              <div style={{ height: 260 }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={sensorState.misalignment.history}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" opacity={0.5} />
-                    <XAxis dataKey="time" stroke="var(--text-dim)" fontSize={11} />
-                    <YAxis stroke="var(--text-dim)" fontSize={11} domain={[0, 45]} unit="mm" />
-                    <Tooltip contentStyle={{ backgroundColor: "var(--bg-surface)", borderColor: "var(--border-color)", borderRadius: 8 }} />
-                    <ReferenceLine y={25} stroke="var(--color-crit)" strokeDasharray="4 4" label="Trip (25mm)" />
-                    <Line type="monotone" dataKey="v" stroke="#3B82F6" strokeWidth={2.5} dot={false} />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
+              <SensorCriticalLogTable
+                sensorDef={SENSOR_DEFS[0]}
+                logs={criticalLogs.misalignment || []}
+                onClear={clearSensorLogs}
+              />
             </div>
           )}
 
           {activeView === "thickness" && (
-            <div className="abb-card">
-              <div className="abb-card-header">
-                <div>
-                  <h1 style={{ fontSize: 16, fontWeight: 800 }}>Magnetic Field &amp; Splice Anomaly (Hall PIN 35)</h1>
-                  <p className="abb-card-subtitle">Hall effect magnetic flux pickup</p>
+            <div>
+              <div className="abb-card">
+                <div className="abb-card-header">
+                  <div>
+                    <h1 style={{ fontSize: 16, fontWeight: 800 }}>Magnetic Field &amp; Splice Anomaly (Hall PIN 35)</h1>
+                    <p className="abb-card-subtitle">Hall effect magnetic flux pickup</p>
+                  </div>
+                  <button onClick={() => setActiveView("home")} className="abb-btn">
+                    <ChevronLeft size={16} /> Back to 3D
+                  </button>
                 </div>
-                <button onClick={() => setActiveView("home")} className="abb-btn">
-                  <ChevronLeft size={16} /> Back to 3D
-                </button>
+                <div style={{ height: 240 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={sensorState.magnetic_hall.history}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" opacity={0.5} />
+                      <XAxis dataKey="time" stroke="var(--text-dim)" fontSize={11} />
+                      <YAxis stroke="var(--text-dim)" fontSize={11} domain={[40, 100]} unit="%" />
+                      <Tooltip contentStyle={{ backgroundColor: "var(--bg-surface)", borderColor: "var(--border-color)", borderRadius: 8 }} />
+                      <Line type="monotone" dataKey="v" stroke="var(--color-good)" strokeWidth={2.5} dot={false} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
               </div>
-              <div style={{ height: 260 }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={sensorState.magnetic_hall.history}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" opacity={0.5} />
-                    <XAxis dataKey="time" stroke="var(--text-dim)" fontSize={11} />
-                    <YAxis stroke="var(--text-dim)" fontSize={11} domain={[40, 100]} unit="%" />
-                    <Tooltip contentStyle={{ backgroundColor: "var(--bg-surface)", borderColor: "var(--border-color)", borderRadius: 8 }} />
-                    <Line type="monotone" dataKey="v" stroke="var(--color-good)" strokeWidth={2.5} dot={false} />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
+              <SensorCriticalLogTable
+                sensorDef={SENSOR_DEFS[1]}
+                logs={criticalLogs.magnetic_hall || []}
+                onClear={clearSensorLogs}
+              />
             </div>
           )}
 
           {activeView === "speed" && (
-            <div className="abb-card">
-              <div className="abb-card-header">
-                <div>
-                  <h1 style={{ fontSize: 16, fontWeight: 800 }}>Motion &amp; Object Detection (Proximity PIN 27)</h1>
-                  <p className="abb-card-subtitle">Inductive proximity detection</p>
+            <div>
+              <div className="abb-card">
+                <div className="abb-card-header">
+                  <div>
+                    <h1 style={{ fontSize: 16, fontWeight: 800 }}>Motion &amp; Object Detection (Proximity PIN 27)</h1>
+                    <p className="abb-card-subtitle">Inductive proximity detection</p>
+                  </div>
+                  <button onClick={() => setActiveView("home")} className="abb-btn">
+                    <ChevronLeft size={16} /> Back to 3D
+                  </button>
                 </div>
-                <button onClick={() => setActiveView("home")} className="abb-btn">
-                  <ChevronLeft size={16} /> Back to 3D
-                </button>
+                <div style={{ height: 240 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={sensorState.proximity_speed.history}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" opacity={0.5} />
+                      <XAxis dataKey="time" stroke="var(--text-dim)" fontSize={11} />
+                      <YAxis stroke="var(--text-dim)" fontSize={11} domain={[0, 4]} unit="m/s" />
+                      <Tooltip contentStyle={{ backgroundColor: "var(--bg-surface)", borderColor: "var(--border-color)", borderRadius: 8 }} />
+                      <Line type="monotone" dataKey="v" stroke="#0052CC" strokeWidth={2.5} dot={false} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
               </div>
-              <div style={{ height: 260 }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={sensorState.proximity_speed.history}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" opacity={0.5} />
-                    <XAxis dataKey="time" stroke="var(--text-dim)" fontSize={11} />
-                    <YAxis stroke="var(--text-dim)" fontSize={11} domain={[0, 4]} unit="m/s" />
-                    <Tooltip contentStyle={{ backgroundColor: "var(--bg-surface)", borderColor: "var(--border-color)", borderRadius: 8 }} />
-                    <Line type="monotone" dataKey="v" stroke="#0052CC" strokeWidth={2.5} dot={false} />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
+              <SensorCriticalLogTable
+                sensorDef={SENSOR_DEFS[2]}
+                logs={criticalLogs.proximity_speed || []}
+                onClear={clearSensorLogs}
+              />
             </div>
           )}
 
           {activeView === "damage" && (
-            <div className="abb-grid-2">
-              <div className="abb-card">
-                <span className="abb-card-title">MLX90614 Temperature (°C)</span>
-                <div style={{ height: 220, marginTop: 12 }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={sensorState.temperature.history}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" opacity={0.5} />
-                      <XAxis dataKey="time" stroke="var(--text-dim)" fontSize={11} />
-                      <YAxis stroke="var(--text-dim)" fontSize={11} domain={[20, 60]} unit="°C" />
-                      <ReferenceLine y={40} stroke="var(--color-crit)" strokeDasharray="4 4" label="Alert (40°C)" />
-                      <Line type="monotone" dataKey="v" stroke="#F59E0B" strokeWidth={2.5} dot={false} />
-                    </LineChart>
-                  </ResponsiveContainer>
+            <div>
+              <div className="abb-grid-2">
+                <div className="abb-card">
+                  <span className="abb-card-title">MLX90614 Temperature (°C)</span>
+                  <div style={{ height: 200, marginTop: 10 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={sensorState.temperature.history}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" opacity={0.5} />
+                        <XAxis dataKey="time" stroke="var(--text-dim)" fontSize={11} />
+                        <YAxis stroke="var(--text-dim)" fontSize={11} domain={[20, 60]} unit="°C" />
+                        <ReferenceLine y={40} stroke="var(--color-crit)" strokeDasharray="4 4" label="Alert (40°C)" />
+                        <Line type="monotone" dataKey="v" stroke="#F59E0B" strokeWidth={2.5} dot={false} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                <div className="abb-card">
+                  <span className="abb-card-title">Piezo Vibration Peak (PIN 34 ADC)</span>
+                  <div style={{ height: 200, marginTop: 10 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={sensorState.vibration.history}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" opacity={0.5} />
+                        <XAxis dataKey="time" stroke="var(--text-dim)" fontSize={11} />
+                        <YAxis stroke="var(--text-dim)" fontSize={11} domain={[0, 4095]} unit="ADC" />
+                        <ReferenceLine y={800} stroke="var(--color-crit)" strokeDasharray="4 4" label="Limit (800)" />
+                        <Line type="monotone" dataKey="v" stroke="#8B5CF6" strokeWidth={2.5} dot={false} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
                 </div>
               </div>
 
-              <div className="abb-card">
-                <span className="abb-card-title">Piezo Vibration Peak (PIN 34 ADC)</span>
-                <div style={{ height: 220, marginTop: 12 }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={sensorState.vibration.history}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" opacity={0.5} />
-                      <XAxis dataKey="time" stroke="var(--text-dim)" fontSize={11} />
-                      <YAxis stroke="var(--text-dim)" fontSize={11} domain={[0, 4095]} unit="ADC" />
-                      <ReferenceLine y={1500} stroke="var(--color-crit)" strokeDasharray="4 4" label="Vib Limit (1500)" />
-                      <Line type="monotone" dataKey="v" stroke="#8B5CF6" strokeWidth={2.5} dot={false} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
+              <SensorCriticalLogTable
+                sensorDef={SENSOR_DEFS[3]}
+                logs={criticalLogs.vibration || []}
+                onClear={clearSensorLogs}
+              />
+
+              <SensorCriticalLogTable
+                sensorDef={SENSOR_DEFS[4]}
+                logs={criticalLogs.temperature || []}
+                onClear={clearSensorLogs}
+              />
             </div>
           )}
 
           {activeView === "alarms" && (
-            <div className="abb-card">
-              <div className="abb-card-header">
-                <span className="abb-card-title">Info X Alarms &amp; Incidents</span>
-                <span className="abb-status-badge crit">{buzzerActive ? "BUZZER ACTIVE" : "NO CRITICAL ALARMS"}</span>
-              </div>
-              <div style={{ padding: "20px 0", fontSize: 13 }}>
-                <p><strong>Buzzer Pin 25:</strong> {buzzerActive ? "HIGH (SOUNDING)" : "LOW (IDLE)"}</p>
-                <p style={{ marginTop: 6, color: "var(--text-muted)" }}>
-                  Triggered on: IR Left/Right LOW, Temp &gt; 40.0°C, or Piezo Peak &gt; 1500.
-                </p>
-              </div>
-            </div>
+            <AlarmsRegistryView
+              criticalLogs={criticalLogs}
+              onClearSensorLogs={clearSensorLogs}
+              buzzerActive={buzzerActive}
+            />
           )}
 
           {activeView === "settings" && (
