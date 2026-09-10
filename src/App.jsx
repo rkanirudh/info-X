@@ -66,6 +66,7 @@ const SENSOR_DEFS = [
     nodeX: -3.2,
     nodeY: 0.65,
     threshold: "25.0 mm",
+    adcThreshold: "2275 ADC (1.83V)",
     zones: [
       { from: 0, to: 12, sev: "good" },
       { from: 12, to: 25, sev: "warn" },
@@ -86,6 +87,7 @@ const SENSOR_DEFS = [
     nodeX: -0.8,
     nodeY: -0.65,
     threshold: "70.0%",
+    adcThreshold: "2866 ADC (2.31V)",
     zones: [
       { from: 40, to: 70, sev: "crit" },
       { from: 70, to: 88, sev: "warn" },
@@ -106,6 +108,7 @@ const SENSOR_DEFS = [
     nodeX: 4.8,
     nodeY: 0.65,
     threshold: "1.5 m/s",
+    adcThreshold: "0 ADC (Active LOW)",
     zones: [
       { from: 0, to: 1.5, sev: "crit" },
       { from: 1.5, to: 1.9, sev: "warn" },
@@ -127,7 +130,8 @@ const SENSOR_DEFS = [
     nominal: 350,
     nodeX: 3.2,
     nodeY: 0.65,
-    threshold: "800 ADC", // Reduced threshold to 800 ADC from 1500
+    threshold: "800 ADC",
+    adcThreshold: "800 ADC (0.64V)",
     zones: [
       { from: 0, to: 500, sev: "good" },
       { from: 500, to: 800, sev: "warn" },
@@ -148,6 +152,7 @@ const SENSOR_DEFS = [
     nodeX: 5.6,
     nodeY: 0.9,
     threshold: "40.0 °C",
+    adcThreshold: "1638 ADC (1.32V)",
     zones: [
       { from: 20, to: 35, sev: "good" },
       { from: 35, to: 40, sev: "warn" },
@@ -197,7 +202,6 @@ function playAlertChime() {
 const BELT_X_MIN = -6.2;
 const BELT_X_MAX = 6.2;
 
-// Intermediate support rollers rotate with belt motion
 function InternalRoller3D({ x, speedRef, color = "#64748b" }) {
   const ref = useRef();
   useFrame((_, delta) => {
@@ -211,16 +215,13 @@ function InternalRoller3D({ x, speedRef, color = "#64748b" }) {
   );
 }
 
-// Edge Rollers / End Pulleys are completely STATIC per requirement
 function StaticEdgeRoller3D({ x, radius = 0.65, color = "#FF000F" }) {
   return (
     <group position={[x, 0, 0]}>
-      {/* Static Heavy-duty Drum */}
       <mesh rotation={[Math.PI / 2, 0, 0]} castShadow receiveShadow>
         <cylinderGeometry args={[radius, radius, 2.2, 32]} />
         <meshStandardMaterial color={color} metalness={0.8} roughness={0.25} />
       </mesh>
-      {/* Static Pillow Block Bearing Mounts */}
       <mesh position={[0, -0.4, 1.25]}>
         <boxGeometry args={[0.5, 0.9, 0.25]} />
         <meshStandardMaterial color="#334155" metalness={0.8} roughness={0.3} />
@@ -229,7 +230,6 @@ function StaticEdgeRoller3D({ x, radius = 0.65, color = "#FF000F" }) {
         <boxGeometry args={[0.5, 0.9, 0.25]} />
         <meshStandardMaterial color="#334155" metalness={0.8} roughness={0.3} />
       </mesh>
-      {/* Shaft End Caps */}
       <mesh position={[0, 0, 1.25]} rotation={[Math.PI / 2, 0, 0]}>
         <cylinderGeometry args={[0.15, 0.15, 0.35, 16]} />
         <meshStandardMaterial color="#94a3b8" metalness={0.9} roughness={0.1} />
@@ -369,25 +369,17 @@ function Conveyor3DScene({ sensorState, laserActive, speedMps, goTo }) {
       </Suspense>
 
       <group position={[0, -0.4, 0]}>
-        {/* Edge Rollers (Pulleys at ends are STATIC) */}
         <StaticEdgeRoller3D x={BELT_X_MAX} radius={0.65} color="#FF000F" />
         <StaticEdgeRoller3D x={BELT_X_MIN} radius={0.65} color="#475569" />
 
-        {/* Rotating Internal Rollers */}
         {rollerXs.map((rx) => (
           <InternalRoller3D key={rx} x={rx} speedRef={speedRef} />
         ))}
 
-        {/* Rubber Conveyor Belt */}
         <ConveyorBelt3D beltColor="#1e293b" />
-
-        {/* Moving Material particles */}
         {speedMps > 0.3 && <MaterialParticles3D speedRef={speedRef} color="#FF000F" />}
-
-        {/* Laser alignment beam */}
         <LaserBeam3D laserActive={laserActive} />
 
-        {/* 3D Sensor Callout Pins */}
         {SENSOR_DEFS.map((s) => (
           <SensorPin3D key={s.id} s={s} st={sensorState[s.id]} goTo={goTo} />
         ))}
@@ -555,7 +547,7 @@ function HomeView({
                 )}
               </div>
               <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>
-                Static Edge Rollers · Piezo Threshold: 800 ADC · Individual Sensor Log Storage
+                Static Edge Rollers · Piezo Threshold: 800 ADC · Individual Sensor Log Storage with ADC Outputs
               </p>
             </div>
           </div>
@@ -690,19 +682,19 @@ function HomeView({
 }
 
 // ---------------------------------------------------------------------------
-// Individual Sensor Critical Alarm Log Table Component
+// Individual Sensor Critical Alarm Log Table Component (With ADC Outputs)
 // ---------------------------------------------------------------------------
-function SensorCriticalLogTable({ sensorDef, logs, onClear, onExport }) {
+function SensorCriticalLogTable({ sensorDef, logs, onClear }) {
   const exportCSV = () => {
-    const header = "ID,Timestamp,Sensor,Hardware,Measured Output,Threshold,Severity,Cause,Action\n";
+    const header = "ID,Timestamp,Sensor,Hardware,ADC_Raw_Value,ADC_Voltage_Volts,Calibrated_Output,Critical_Threshold,Severity,Cause,Action\n";
     const rows = logs.map((l) =>
-      `"${l.id}","${l.timestamp}","${l.sensorName}","${l.hardware}","${l.outputValue}","${l.threshold || ''}","${l.severity}","${l.cause.replace(/"/g, '""')}","${l.action.replace(/"/g, '""')}"`
+      `"${l.id}","${l.timestamp}","${l.sensorName}","${l.hardware}","${l.adcRaw || ''}","${l.adcVoltage || ''}","${l.outputValue}","${l.threshold || ''}","${l.severity}","${l.cause.replace(/"/g, '""')}","${l.action.replace(/"/g, '""')}"`
     ).join("\n");
     const blob = new Blob([header + rows], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `critical-logs-${sensorDef.id}-${Date.now()}.csv`;
+    link.download = `critical-logs-${sensorDef.id}-ADC-${Date.now()}.csv`;
     link.click();
     URL.revokeObjectURL(url);
   };
@@ -711,9 +703,9 @@ function SensorCriticalLogTable({ sensorDef, logs, onClear, onExport }) {
     <div className="abb-card" style={{ marginTop: 16 }}>
       <div className="abb-card-header">
         <div>
-          <span className="abb-card-title">{sensorDef.label} — Saved Critical Alarm Logs</span>
+          <span className="abb-card-title">{sensorDef.label} — Saved Critical Alarm Logs &amp; ADC Outputs</span>
           <p className="abb-card-subtitle">
-            Persisted individually in storage · {logs.length} critical incidents recorded
+            Recorded whenever reading crossed above critical threshold · {logs.length} incidents logged
           </p>
         </div>
         <div style={{ display: "flex", gap: 10 }}>
@@ -738,10 +730,12 @@ function SensorCriticalLogTable({ sensorDef, logs, onClear, onExport }) {
               <tr>
                 <th>Log ID</th>
                 <th>Timestamp</th>
-                <th>Hardware Output</th>
-                <th>Critical Threshold</th>
-                <th>Cause &amp; Root Incident</th>
-                <th>Recommended Action</th>
+                <th>Raw ADC Output (12-bit)</th>
+                <th>ADC Voltage (3.3V)</th>
+                <th>Calibrated Reading</th>
+                <th>Critical Limit</th>
+                <th>Cause &amp; Diagnostics</th>
+                <th>Action Taken</th>
               </tr>
             </thead>
             <tbody>
@@ -749,6 +743,8 @@ function SensorCriticalLogTable({ sensorDef, logs, onClear, onExport }) {
                 <tr key={l.id}>
                   <td className="mono" style={{ fontSize: 11, color: "var(--text-dim)" }}>{l.id}</td>
                   <td className="mono" style={{ fontSize: 11 }}>{l.timestamp}</td>
+                  <td className="mono" style={{ fontWeight: 800, color: "var(--color-crit)" }}>{l.adcRaw}</td>
+                  <td className="mono" style={{ fontSize: 11, color: "var(--text-dim)" }}>{l.adcVoltage}</td>
                   <td style={{ fontWeight: 800, color: "var(--color-crit)" }}>{l.outputValue}</td>
                   <td className="mono" style={{ fontSize: 11, color: "var(--text-muted)" }}>{l.threshold}</td>
                   <td style={{ fontSize: 11, color: "var(--text-main)" }}>{l.cause}</td>
@@ -764,7 +760,7 @@ function SensorCriticalLogTable({ sensorDef, logs, onClear, onExport }) {
 }
 
 // ---------------------------------------------------------------------------
-// Alarms & Events Registry View (Multi-Sensor Individual Logs)
+// Alarms & Events Registry View (Multi-Sensor Individual Logs with ADC)
 // ---------------------------------------------------------------------------
 function AlarmsRegistryView({ criticalLogs, onClearSensorLogs, buzzerActive }) {
   const [activeTab, setActiveTab] = useState("all");
@@ -778,15 +774,15 @@ function AlarmsRegistryView({ criticalLogs, onClearSensorLogs, buzzerActive }) {
   }, [criticalLogs]);
 
   const exportAllCSV = () => {
-    const header = "ID,Timestamp,Sensor,Hardware,Measured Output,Threshold,Severity,Cause,Action\n";
+    const header = "ID,Timestamp,Sensor,Hardware,ADC_Raw_Value,ADC_Voltage_Volts,Calibrated_Output,Critical_Threshold,Severity,Cause,Action\n";
     const rows = allLogs.map((l) =>
-      `"${l.id}","${l.timestamp}","${l.sensorName}","${l.hardware}","${l.outputValue}","${l.threshold || ''}","${l.severity}","${l.cause.replace(/"/g, '""')}","${l.action.replace(/"/g, '""')}"`
+      `"${l.id}","${l.timestamp}","${l.sensorName}","${l.hardware}","${l.adcRaw || ''}","${l.adcVoltage || ''}","${l.outputValue}","${l.threshold || ''}","${l.severity}","${l.cause.replace(/"/g, '""')}","${l.action.replace(/"/g, '""')}"`
     ).join("\n");
     const blob = new Blob([header + rows], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `all-critical-sensor-alarms-${Date.now()}.csv`;
+    link.download = `all-critical-sensor-alarms-ADC-${Date.now()}.csv`;
     link.click();
     URL.revokeObjectURL(url);
   };
@@ -797,7 +793,7 @@ function AlarmsRegistryView({ criticalLogs, onClearSensorLogs, buzzerActive }) {
         <div>
           <h1 style={{ fontSize: 16, fontWeight: 800 }}>Info X — Individual Sensor Critical Alarm Registry</h1>
           <p className="abb-card-subtitle">
-            Every critical incident is permanently saved with exact output readings &amp; causes
+            Saved immediately when sensors cross above the critical line with exact ADC output readings
           </p>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -852,8 +848,10 @@ function AlarmsRegistryView({ criticalLogs, onClearSensorLogs, buzzerActive }) {
                     <th>Timestamp</th>
                     <th>Sensor Name</th>
                     <th>Hardware Channel</th>
-                    <th>Measured Output</th>
-                    <th>Threshold</th>
+                    <th>Raw ADC Output</th>
+                    <th>ADC Voltage</th>
+                    <th>Calibrated Output</th>
+                    <th>Critical Limit</th>
                     <th>Cause &amp; Diagnostics</th>
                     <th>Action Required</th>
                   </tr>
@@ -865,6 +863,8 @@ function AlarmsRegistryView({ criticalLogs, onClearSensorLogs, buzzerActive }) {
                       <td className="mono" style={{ fontSize: 11 }}>{l.timestamp}</td>
                       <td style={{ fontWeight: 800 }}>{l.sensorName}</td>
                       <td style={{ color: "var(--text-muted)", fontSize: 11 }}>{l.hardware}</td>
+                      <td className="mono" style={{ fontWeight: 800, color: "var(--color-crit)" }}>{l.adcRaw}</td>
+                      <td className="mono" style={{ fontSize: 11, color: "var(--text-dim)" }}>{l.adcVoltage}</td>
                       <td style={{ fontWeight: 800, color: "var(--color-crit)" }}>{l.outputValue}</td>
                       <td className="mono" style={{ fontSize: 11, color: "var(--text-dim)" }}>{l.threshold}</td>
                       <td style={{ fontSize: 11 }}>{l.cause}</td>
@@ -940,15 +940,14 @@ export default function BeltMonitorPro() {
     return init;
   });
 
-  // Persist critical logs to localStorage whenever updated
   useEffect(() => {
     try {
       localStorage.setItem("infox_critical_sensor_logs", JSON.stringify(criticalLogs));
     } catch (e) {}
   }, [criticalLogs]);
 
-  // Record an individual critical log entry for a specific sensor
-  const recordCriticalLog = useCallback((sensorId, outputValue, cause, action) => {
+  // Record an individual critical log entry whenever a sensor moves above critical line
+  const recordCriticalLog = useCallback((sensorId, outputValue, adcRaw, adcVoltage, cause, action) => {
     const sDef = SENSOR_DEFS.find((s) => s.id === sensorId);
     if (!sDef) return;
 
@@ -959,6 +958,8 @@ export default function BeltMonitorPro() {
       sensorId: sDef.id,
       sensorName: sDef.label,
       hardware: sDef.hardwareType,
+      adcRaw: adcRaw,
+      adcVoltage: adcVoltage,
       outputValue: outputValue,
       threshold: sDef.threshold,
       severity: "CRITICAL",
@@ -979,7 +980,6 @@ export default function BeltMonitorPro() {
     }));
   }, []);
 
-  // Button 14 toggle logic
   const toggleLaser = useCallback(() => {
     setLaserState((prev) => {
       const next = !prev;
@@ -990,11 +990,10 @@ export default function BeltMonitorPro() {
   }, []);
 
   const triggerPiezoSpike = useCallback(() => {
-    setPiezoVal(1850); // Spike above the new 800 ADC threshold
+    setPiezoVal(1850);
     setPiezoTimer(Date.now());
   }, []);
 
-  // State selection matching C++ firmware (Vibration threshold @ 800)
   const currentState = useMemo(() => {
     if (showLaserMsg) return laserState ? 1 : 7;
     if (Date.now() - piezoTimer < 3000 || piezoVal > 800) return 2;
@@ -1005,7 +1004,6 @@ export default function BeltMonitorPro() {
     return 0;
   }, [showLaserMsg, laserState, piezoTimer, piezoVal, tempC, irLeft, irRight, magState, proxState]);
 
-  // Buzzer logic: threshold @ 800 for piezo
   const buzzerActive = useMemo(() => {
     return irLeft === 0 || irRight === 0 || tempC > 40.0 || piezoVal > 800 || Date.now() - piezoTimer < 3000;
   }, [irLeft, irRight, tempC, piezoVal, piezoTimer]);
@@ -1030,7 +1028,6 @@ export default function BeltMonitorPro() {
         setPiezoVal(Math.round(300 + Math.random() * 100));
       }
 
-      // Try fetching from real ESP32
       if (isEspConnected && espEndpoint) {
         try {
           const res = await fetch(espEndpoint, { signal: AbortSignal.timeout(1000) });
@@ -1051,7 +1048,7 @@ export default function BeltMonitorPro() {
       setSensorState((prev) => {
         const next = {};
 
-        // 1. Misalignment
+        // 1. IR Misalignment (PIN 32, 33)
         const misVal = irLeft === 0 || irRight === 0 ? 32.5 : 5.4 + (Math.random() - 0.5) * 0.8;
         const misSev = severityOf(SENSOR_DEFS[0], misVal);
         next.misalignment = {
@@ -1061,11 +1058,13 @@ export default function BeltMonitorPro() {
         };
         if (misSev === "crit" && lastLoggedState.current.misalignment !== "crit") {
           const zone = irLeft === 0 && irRight === 0 ? "Both Sides Blocked" : irLeft === 0 ? "Left Edge Blocked" : "Right Edge Blocked";
-          recordCriticalLog("misalignment", `${misVal.toFixed(1)} mm (${zone})`, "Lateral edge obstruction detected by IR beam PIN 32/33.", "Adjust conveyor training idlers and clear belt frame obstruction.");
+          const rawAdc = Math.round((misVal / 45.0) * 4095);
+          const adcVolt = ((rawAdc / 4095.0) * 3.3).toFixed(2) + " V";
+          recordCriticalLog("misalignment", `${misVal.toFixed(1)} mm (${zone})`, `${rawAdc} ADC`, adcVolt, "Lateral edge obstruction moved above critical threshold (>25.0 mm).", "Adjust conveyor training idlers and clear belt frame obstruction.");
         }
         lastLoggedState.current.misalignment = misSev;
 
-        // 2. Magnetic Hall
+        // 2. Magnetic Hall (PIN 35)
         const magVal = magState === 0 ? 55.0 : 96.5 + (Math.random() - 0.5) * 0.5;
         const magSev = severityOf(SENSOR_DEFS[1], magVal);
         next.magnetic_hall = {
@@ -1074,11 +1073,13 @@ export default function BeltMonitorPro() {
           history: [...prev.magnetic_hall.history.slice(1), { time: new Date().toLocaleTimeString(), v: +magVal.toFixed(1) }],
         };
         if (magSev === "crit" && lastLoggedState.current.magnetic_hall !== "crit") {
-          recordCriticalLog("magnetic_hall", `${magVal.toFixed(1)}% Flux`, "Magnetic anomaly / field disturbance detected on Hall PIN 35.", "Inspect magnetic splice loop transponders for longitudinal tear.");
+          const rawAdc = Math.round((magVal / 100.0) * 4095);
+          const adcVolt = ((rawAdc / 4095.0) * 3.3).toFixed(2) + " V";
+          recordCriticalLog("magnetic_hall", `${magVal.toFixed(1)}% Flux (Anomaly)`, `${rawAdc} ADC`, adcVolt, "Magnetic field disturbance dropped below 70.0% safe line.", "Inspect magnetic splice loop transponders for longitudinal tear.");
         }
         lastLoggedState.current.magnetic_hall = magSev;
 
-        // 3. Proximity / Speed
+        // 3. Proximity / Motion (PIN 27)
         const speedVal = proxState === 0 ? 0.0 : 2.35 + (Math.random() - 0.5) * 0.05;
         const speedSev = severityOf(SENSOR_DEFS[2], speedVal);
         next.proximity_speed = {
@@ -1087,11 +1088,13 @@ export default function BeltMonitorPro() {
           history: [...prev.proximity_speed.history.slice(1), { time: new Date().toLocaleTimeString(), v: +speedVal.toFixed(2) }],
         };
         if (speedSev === "crit" && lastLoggedState.current.proximity_speed !== "crit") {
-          recordCriticalLog("proximity_speed", `${speedVal.toFixed(2)} m/s (ZERO MOTION)`, "Object in belt zone / pulley movement halted (PIN 27 LOW).", "Verify loading chute clearance and restart drive motor.");
+          const rawAdc = proxState === 0 ? 0 : 4095;
+          const adcVolt = proxState === 0 ? "0.00 V" : "3.30 V";
+          recordCriticalLog("proximity_speed", `${speedVal.toFixed(2)} m/s (ZERO SPEED)`, `${rawAdc} ADC (LOW)`, adcVolt, "Object detected in belt zone / pulley rotation halted below 1.50 m/s.", "Verify loading chute clearance and restart drive motor.");
         }
         lastLoggedState.current.proximity_speed = speedSev;
 
-        // 4. Vibration (Threshold @ 800 ADC)
+        // 4. Vibration (PIN 34 ADC > 800)
         const vibVal = piezoVal;
         const vibSev = severityOf(SENSOR_DEFS[3], vibVal);
         next.vibration = {
@@ -1100,11 +1103,13 @@ export default function BeltMonitorPro() {
           history: [...prev.vibration.history.slice(1), { time: new Date().toLocaleTimeString(), v: vibVal }],
         };
         if (vibSev === "crit" && lastLoggedState.current.vibration !== "crit") {
-          recordCriticalLog("vibration", `${vibVal} ADC Peak`, "Motor vibration exceeded critical limit (800 ADC threshold breached).", "Inspect drive motor mounting, gearbox alignment, and bearing wear.");
+          const rawAdc = vibVal;
+          const adcVolt = ((rawAdc / 4095.0) * 3.3).toFixed(2) + " V";
+          recordCriticalLog("vibration", `${vibVal} ADC Peak`, `${rawAdc} ADC`, adcVolt, `Motor vibration exceeded critical limit (Reading: ${vibVal} ADC > 800 ADC threshold).`, "Inspect drive motor mounting, gearbox alignment, and bearing wear.");
         }
         lastLoggedState.current.vibration = vibSev;
 
-        // 5. MLX90614 Temperature
+        // 5. MLX90614 Temperature (I2C > 40.0°C)
         const tempVal = tempC;
         const tempSev = severityOf(SENSOR_DEFS[4], tempVal);
         next.temperature = {
@@ -1113,7 +1118,9 @@ export default function BeltMonitorPro() {
           history: [...prev.temperature.history.slice(1), { time: new Date().toLocaleTimeString(), v: +tempVal.toFixed(1) }],
         };
         if (tempSev === "crit" && lastLoggedState.current.temperature !== "crit") {
-          recordCriticalLog("temperature", `${tempVal.toFixed(1)} °C`, "MLX90614 infrared object temp exceeded critical threshold (40.0 °C).", "Check motor bearing lubrication and cooling airflow.");
+          const rawAdc = Math.round((tempVal / 100.0) * 4095);
+          const adcVolt = ((rawAdc / 4095.0) * 3.3).toFixed(2) + " V";
+          recordCriticalLog("temperature", `${tempVal.toFixed(1)} °C`, `${rawAdc} ADC eq.`, adcVolt, `MLX90614 infrared object temp moved above 40.0°C critical line (Reading: ${tempVal.toFixed(1)}°C).`, "Check motor bearing lubrication and cooling airflow.");
         }
         lastLoggedState.current.temperature = tempSev;
 
@@ -1264,7 +1271,7 @@ export default function BeltMonitorPro() {
                 <div className="abb-card-header">
                   <div>
                     <h1 style={{ fontSize: 16, fontWeight: 800 }}>IR Misalignment Status (PIN 32 &amp; 33)</h1>
-                    <p className="abb-card-subtitle">Active Low edge beam obstruction tracking</p>
+                    <p className="abb-card-subtitle">Critical Threshold: &gt;25.0 mm · 2275 ADC (1.83V)</p>
                   </div>
                   <button onClick={() => setActiveView("home")} className="abb-btn">
                     <ChevronLeft size={16} /> Back to 3D
@@ -1277,7 +1284,7 @@ export default function BeltMonitorPro() {
                       <XAxis dataKey="time" stroke="var(--text-dim)" fontSize={11} />
                       <YAxis stroke="var(--text-dim)" fontSize={11} domain={[0, 45]} unit="mm" />
                       <Tooltip contentStyle={{ backgroundColor: "var(--bg-surface)", borderColor: "var(--border-color)", borderRadius: 8 }} />
-                      <ReferenceLine y={25} stroke="var(--color-crit)" strokeDasharray="4 4" label="Trip (25mm)" />
+                      <ReferenceLine y={25} stroke="var(--color-crit)" strokeDasharray="4 4" label="Trip (25mm / 2275 ADC)" />
                       <Line type="monotone" dataKey="v" stroke="#3B82F6" strokeWidth={2.5} dot={false} />
                     </LineChart>
                   </ResponsiveContainer>
@@ -1297,7 +1304,7 @@ export default function BeltMonitorPro() {
                 <div className="abb-card-header">
                   <div>
                     <h1 style={{ fontSize: 16, fontWeight: 800 }}>Magnetic Field &amp; Splice Anomaly (Hall PIN 35)</h1>
-                    <p className="abb-card-subtitle">Hall effect magnetic flux pickup</p>
+                    <p className="abb-card-subtitle">Critical Threshold: &lt;70.0% · 2866 ADC (2.31V)</p>
                   </div>
                   <button onClick={() => setActiveView("home")} className="abb-btn">
                     <ChevronLeft size={16} /> Back to 3D
@@ -1310,6 +1317,7 @@ export default function BeltMonitorPro() {
                       <XAxis dataKey="time" stroke="var(--text-dim)" fontSize={11} />
                       <YAxis stroke="var(--text-dim)" fontSize={11} domain={[40, 100]} unit="%" />
                       <Tooltip contentStyle={{ backgroundColor: "var(--bg-surface)", borderColor: "var(--border-color)", borderRadius: 8 }} />
+                      <ReferenceLine y={70} stroke="var(--color-crit)" strokeDasharray="4 4" label="Limit (70% / 2866 ADC)" />
                       <Line type="monotone" dataKey="v" stroke="var(--color-good)" strokeWidth={2.5} dot={false} />
                     </LineChart>
                   </ResponsiveContainer>
@@ -1329,7 +1337,7 @@ export default function BeltMonitorPro() {
                 <div className="abb-card-header">
                   <div>
                     <h1 style={{ fontSize: 16, fontWeight: 800 }}>Motion &amp; Object Detection (Proximity PIN 27)</h1>
-                    <p className="abb-card-subtitle">Inductive proximity detection</p>
+                    <p className="abb-card-subtitle">Critical Threshold: &lt;1.50 m/s / Object Detected (0 ADC)</p>
                   </div>
                   <button onClick={() => setActiveView("home")} className="abb-btn">
                     <ChevronLeft size={16} /> Back to 3D
@@ -1342,6 +1350,7 @@ export default function BeltMonitorPro() {
                       <XAxis dataKey="time" stroke="var(--text-dim)" fontSize={11} />
                       <YAxis stroke="var(--text-dim)" fontSize={11} domain={[0, 4]} unit="m/s" />
                       <Tooltip contentStyle={{ backgroundColor: "var(--bg-surface)", borderColor: "var(--border-color)", borderRadius: 8 }} />
+                      <ReferenceLine y={1.5} stroke="var(--color-crit)" strokeDasharray="4 4" label="Halt (1.5 m/s)" />
                       <Line type="monotone" dataKey="v" stroke="#0052CC" strokeWidth={2.5} dot={false} />
                     </LineChart>
                   </ResponsiveContainer>
@@ -1359,14 +1368,14 @@ export default function BeltMonitorPro() {
             <div>
               <div className="abb-grid-2">
                 <div className="abb-card">
-                  <span className="abb-card-title">MLX90614 Temperature (°C)</span>
+                  <span className="abb-card-title">MLX90614 Temperature (°C) — Threshold: 40.0°C</span>
                   <div style={{ height: 200, marginTop: 10 }}>
                     <ResponsiveContainer width="100%" height="100%">
                       <LineChart data={sensorState.temperature.history}>
                         <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" opacity={0.5} />
                         <XAxis dataKey="time" stroke="var(--text-dim)" fontSize={11} />
                         <YAxis stroke="var(--text-dim)" fontSize={11} domain={[20, 60]} unit="°C" />
-                        <ReferenceLine y={40} stroke="var(--color-crit)" strokeDasharray="4 4" label="Alert (40°C)" />
+                        <ReferenceLine y={40} stroke="var(--color-crit)" strokeDasharray="4 4" label="Alert (40°C / 1638 ADC)" />
                         <Line type="monotone" dataKey="v" stroke="#F59E0B" strokeWidth={2.5} dot={false} />
                       </LineChart>
                     </ResponsiveContainer>
@@ -1374,14 +1383,14 @@ export default function BeltMonitorPro() {
                 </div>
 
                 <div className="abb-card">
-                  <span className="abb-card-title">Piezo Vibration Peak (PIN 34 ADC)</span>
+                  <span className="abb-card-title">Piezo Vibration Peak (PIN 34 ADC) — Threshold: 800 ADC</span>
                   <div style={{ height: 200, marginTop: 10 }}>
                     <ResponsiveContainer width="100%" height="100%">
                       <LineChart data={sensorState.vibration.history}>
                         <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" opacity={0.5} />
                         <XAxis dataKey="time" stroke="var(--text-dim)" fontSize={11} />
                         <YAxis stroke="var(--text-dim)" fontSize={11} domain={[0, 4095]} unit="ADC" />
-                        <ReferenceLine y={800} stroke="var(--color-crit)" strokeDasharray="4 4" label="Limit (800)" />
+                        <ReferenceLine y={800} stroke="var(--color-crit)" strokeDasharray="4 4" label="Limit (800 ADC / 0.64V)" />
                         <Line type="monotone" dataKey="v" stroke="#8B5CF6" strokeWidth={2.5} dot={false} />
                       </LineChart>
                     </ResponsiveContainer>
